@@ -1,0 +1,11 @@
+node_modules
+.env
+frontend/.env.local
+.env.*
+!.env.example
+.vercel/
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+frontend/dist/

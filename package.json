@@ -1,0 +1,20 @@
+{
+  "name": "pythonbuddy-ai-tutor",
+  "version": "1.0.0",
+  "description": "A personalized Python learning assistant",
+  "main": "server.js",
+  "scripts": {
+    "start": "npm run build:frontend && python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 3000",
+    "dev": "npm run build:frontend && python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 3000 --reload",
+    "dev:api": "python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 3000 --reload",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "test:backend": "python -m pytest backend/tests",
+    "test:frontend": "npm --prefix frontend test"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "engines": { "node": ">=18" }
+}

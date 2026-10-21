@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f6f0">
+  <title>AlgebraBuddy | Your algebra tutor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="AlgebraBuddy home"><span class="brand-mark">a</span><span>algebra<span class="brand-light">buddy</span></span></a>
+    <div class="top-note"><span class="live-dot"></span> YOUR CLASS 8 MATHS STUDIO</div>
+  </header>
+
+  <section id="setup" class="setup-shell">
+    <div class="setup-copy">
+      <div class="eyebrow"><span class="eyebrow-line"></span> A LITTLE HELP GOES A LONG WAY</div>
+      <h1>Maths that<br>finally <em>clicks.</em></h1>
+      <p class="intro">A patient algebra tutor that meets you where you are, works through the tricky bits, and lets you find the answer yourself.</p>
+      <div class="promise-row"><span class="promise-icon">01</span><span>Small steps. Real understanding.</span></div>
+      <div class="promise-row"><span class="promise-icon">02</span><span>Practice that adapts to you.</span></div>
+    </div>
+    <div class="setup-form">
+      <div class="form-heading"><span class="step-label">YOUR LEARNING SPACE</span><span class="step-number">01 / 01</span></div>
+      <h2>Let’s make this yours.</h2>
+      <p class="form-sub">A couple of details help your tutor find the right level.</p>
+      <label for="nm">What should we call you?</label>
+      <input id="nm" placeholder="Your first name" maxlength="30" autocomplete="given-name">
+      <div class="form-pair">
+        <div><label for="lv">Your starting point</label>
+          <select id="lv">
+            <option>I’m just starting out</option>
+            <option>I know the basics</option>
+            <option>I’m fairly confident</option>
+          </select>
+        </div>
+        <div><label for="df">Challenge level</label>
+          <select id="df">
+            <option>Beginner</option>
+            <option>Intermediate</option>
+            <option>Advanced</option>
+          </select>
+        </div>
+      </div>
+      <label for="tp">What are we learning?</label>
+      <select id="tp">
+        <option>Variables</option>
+        <option>Algebraic expressions</option>
+        <option selected>Linear equations</option>
+        <option>Word problems</option>
+      </select>
+      <div class="gap"><button class="p start-button" id="go"><span>Start my lesson</span><span aria-hidden="true">&#8594;</span></button></div>
+      <div class="privacy-note"><span aria-hidden="true">&#9679;</span> Your progress stays in this session.</div>
+    </div>
+  </section>
+
+  <section id="app" class="hide">
+    <div class="lesson-head">
+      <div><div class="eyebrow"><span class="eyebrow-line"></span> YOUR LEARNING SPACE</div><h1 id="lesson-title">Let's get started.</h1><p id="lesson-meta" class="sub"></p></div>
+      <div class="learner-pill"><span class="avatar" id="avatar">L</span><span id="who"></span></div>
+    </div>
+    <div class="grid">
+      <main class="lesson-panel">
+        <div class="modebar">
+          <span class="mode-label">CHOOSE A MODE</span>
+          <div class="tabs" id="tabs" role="tablist" aria-label="Learning mode">
+            <button data-m="Learn" class="on" role="tab" aria-selected="true"><span class="tab-icon">01</span>Learn</button>
+            <button data-m="Practice" role="tab" aria-selected="false"><span class="tab-icon">02</span>Practice</button>
+            <button data-m="Quiz" role="tab" aria-selected="false"><span class="tab-icon">03</span>Quiz</button>
+            <button data-m="Doubt" role="tab" aria-selected="false"><span class="tab-icon">04</span>Doubt</button>
+          </div>
+        </div>
+        <div class="chat-wrap"><div class="chat-topline"><span><span class="live-dot"></span> YOUR TUTOR IS HERE</span><span id="mode-label">LEARN MODE</span></div>
+        <div id="chat" aria-live="polite" aria-label="Tutor conversation"></div></div>
+        <div class="chips" id="chips"></div>
+        <div class="composer">
+          <input id="in" placeholder="Ask a question or try an answer..." autocomplete="off" aria-label="Your message">
+          <button class="p" id="send" aria-label="Send message"><span>Send</span><span aria-hidden="true">&#8593;</span></button>
+        </div>
+        <div class="err" id="err" role="alert"></div>
+      </main>
+
+      <aside class="progress-panel">
+        <div class="panel-kicker">YOUR PROGRESS <span class="progress-spark">&#10022;</span></div>
+        <div class="score-row"><div><b id="sc">0/0</b><span>correct answers</span></div><div class="score-ring"><span id="rate">--</span><small>%</small></div></div>
+        <div class="bar" role="progressbar" aria-label="Correct answer rate" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="pb"></i></div>
+        <div class="progress-caption"><span>Session accuracy</span><span id="attempted-count">0 attempts</span></div>
+        <div class="skill-section"><span class="skill-title"><i class="skill-dot strong-dot"></i>Getting confident</span><ul id="strong"></ul></div>
+        <div class="skill-section"><span class="skill-title"><i class="skill-dot weak-dot"></i>Worth another look</span><ul id="weak"></ul></div>
+        <div class="next-lesson"><span class="next-kicker">UP NEXT</span><p id="next-topic">Your next step will take shape as you learn.</p></div>
+        <button class="finish-button" id="end"><span>Finish session</span><span aria-hidden="true">&#8594;</span></button>
+      </aside>
+    </div>
+    <footer class="app-footer"><span>ALGEBRA, ONE SMALL WIN AT A TIME.</span><span>CLASS 8 MATHS</span></footer>
+  </section>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
