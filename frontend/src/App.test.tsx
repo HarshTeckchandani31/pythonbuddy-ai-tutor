@@ -152,14 +152,44 @@ describe("PythonBuddy workspace", () => {
     expect(authApi.signUp).toHaveBeenCalledWith("riya@example.com", "password123", "Riya");
   });
 
-  it("restores the latest saved session after sign-in", async () => {
+  it("shows topic selection after sign-in and offers the previous session as an explicit choice", async () => {
     vi.mocked(authApi.getSession).mockResolvedValue(authSession);
     vi.mocked(tutorApi.getLatestSession).mockResolvedValue(session);
+    const user = userEvent.setup();
     render(<App />);
 
+    expect(await screen.findByLabelText("What are we learning?")).toHaveValue("Python variables");
+    expect(await screen.findByRole("button", { name: "Resume saved session" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start a new topic" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Learn" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Resume saved session" }));
     expect(await screen.findByRole("heading", { name: /python variables/i })).toBeInTheDocument();
     expect(screen.getByText("Welcome back. Your last session was python variables. Your saved progress is restored.")).toBeInTheDocument();
     expect(screen.getByText("0 attempts")).toBeInTheDocument();
+  });
+
+  it("allows a returning learner to select a different topic after signing in", async () => {
+    vi.mocked(authApi.getSession).mockResolvedValue(authSession);
+    vi.mocked(tutorApi.getLatestSession).mockResolvedValue(session);
+    vi.mocked(tutorApi.createSession).mockResolvedValue({
+      ...session,
+      profile: { ...session.profile, topic: "Data types and strings" },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    const topicPicker = await screen.findByLabelText("What are we learning?");
+    await user.selectOptions(topicPicker, "Data types and strings");
+    await user.click(screen.getByRole("button", { name: "Start a new topic" }));
+
+    expect(tutorApi.createSession).toHaveBeenCalledWith({
+      name: "Riya",
+      level: "beginner",
+      difficulty: "beginner",
+      topic: "Data types and strings",
+    });
+    expect(await screen.findByRole("heading", { name: /data types and strings/i })).toBeInTheDocument();
   });
 
   it("creates a personalized session and loads Learn mode", async () => {

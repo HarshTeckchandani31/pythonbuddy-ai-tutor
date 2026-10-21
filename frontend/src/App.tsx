@@ -79,6 +79,7 @@ function LearnerApp() {
   const [difficulty, setDifficulty] = useState<LearnerLevel>("beginner");
   const [topic, setTopic] = useState(TOPICS[0]);
   const [session, setSession] = useState<LearnerSession | null>(null);
+  const [savedSession, setSavedSession] = useState<LearnerSession | null>(null);
   const [mode, setMode] = useState<LearningMode>("learn");
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeQuestion, setActiveQuestion] = useState<TutorQuestion | null>(null);
@@ -141,10 +142,14 @@ function LearnerApp() {
   useEffect(() => {
     if (!authSession) {
       setSession(null);
+      setSavedSession(null);
       setMessages([]);
       return;
     }
     let active = true;
+    setSession(null);
+    setSavedSession(null);
+    setMessages([]);
     setName(
       typeof authSession.user.user_metadata.full_name === "string"
         ? authSession.user.user_metadata.full_name
@@ -154,15 +159,11 @@ function LearnerApp() {
     void tutorApi.getLatestSession()
       .then((latest) => {
         if (active && latest) {
-          setSession(latest);
+          setSavedSession(latest);
           setName(latest.profile.name);
-          setMode("learn");
-          setMessages([
-            makeMessage(
-              "assistant",
-              `Welcome back. Your last session was ${latest.profile.topic.toLowerCase()}. Your saved progress is restored.`,
-            ),
-          ]);
+          setLevel(latest.profile.level);
+          setDifficulty(latest.profile.difficulty);
+          setTopic(latest.profile.topic);
         }
       })
       .catch((cause: unknown) => {
@@ -228,6 +229,18 @@ function LearnerApp() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const resumeSavedSession = () => {
+    if (!savedSession) return;
+    setSession(savedSession);
+    setMode("learn");
+    setMessages([
+      makeMessage(
+        "assistant",
+        `Welcome back. Your last session was ${savedSession.profile.topic.toLowerCase()}. Your saved progress is restored.`,
+      ),
+    ]);
   };
 
   const loadMode = async (nextMode: LearningMode, activeSession = session) => {
@@ -456,8 +469,16 @@ function LearnerApp() {
             </div>
             <label htmlFor="topic">What are we learning?</label>
             <select id="topic" value={topic} onChange={(event) => setTopic(event.target.value)}>{TOPICS.map((item) => <option key={item}>{item}</option>)}</select>
+            {savedSession && (
+              <div className="resume-session">
+                <p>You have saved progress for <strong>{savedSession.profile.topic}</strong> ({savedSession.progress.attempted} attempts).</p>
+                <button className="auth-switch" type="button" disabled={loading} onClick={resumeSavedSession}>
+                  Resume saved session
+                </button>
+              </div>
+            )}
             {error && <p className="error-banner" role="alert">{error}</p>}
-            <button className="primary-button start-button" disabled={loading} type="submit"><span>{loading ? "Opening your session..." : "Start my lesson"}</span>{loading ? <LoaderCircle className="spin" size={18} /> : <ArrowRight size={19} />}</button>
+            <button className="primary-button start-button" disabled={loading} type="submit"><span>{loading ? "Loading your learning space..." : savedSession ? "Start a new topic" : "Start my lesson"}</span>{loading ? <LoaderCircle className="spin" size={18} /> : <ArrowRight size={19} />}</button>
             <div className="privacy-note"><span>●</span> Progress stays in this session.</div>
           </form>
         </main>

@@ -67,6 +67,10 @@ input:focus, select:focus, textarea:focus { border-color: #6d9b7b; box-shadow: 0
 .start-button { width: 100%; min-height: 49px; justify-content: space-between; padding: 0 17px; }
 .privacy-note { margin-top: 13px; color: #899189; text-align: center; font-size: 11px; }
 .privacy-note span { margin-right: 5px; color: var(--green); font-size: 8px; }
+.resume-session { margin-top: 17px; padding: 12px; border: 1px solid #dce8dc; background: #f5f8f3; }
+.resume-session p { margin: 0; color: #69736b; font-size: 11px; line-height: 1.5; }
+.resume-session strong { color: var(--green-dark); }
+.resume-session .auth-switch { margin-top: 5px; padding: 7px 0 0; text-align: left; }
 .error-banner, .error-inline { border-left: 2px solid var(--coral); background: #fbefeb; color: #914333; font-size: 12px; }
 .error-banner { margin: 16px 0 0; padding: 10px 12px; }
 .workspace { padding-top: 34px; }
