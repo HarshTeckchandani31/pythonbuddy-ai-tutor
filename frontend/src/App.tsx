@@ -82,6 +82,10 @@ function App() {
   const [error, setError] = useState("");
   const [summary, setSummary] = useState<SessionSummary | null>(null);
   const [quizResult, setQuizResult] = useState<QuizAnswer | null>(null);
+  const [feedback, setFeedback] = useState("");
+  const [feedbackNotice, setFeedbackNotice] = useState("");
+  const [feedbackError, setFeedbackError] = useState("");
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
 
   const addMessage = (message: Message) => setMessages((current) => [...current, message]);
 
@@ -320,6 +324,24 @@ function App() {
     }
   };
 
+  const sendFeedback = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = feedback.trim();
+    if (!value || submittingFeedback) return;
+    setSubmittingFeedback(true);
+    setFeedbackError("");
+    setFeedbackNotice("");
+    try {
+      const result = await tutorApi.submitFeedback(value);
+      setFeedback("");
+      setFeedbackNotice(result.message);
+    } catch (cause) {
+      setFeedbackError(cause instanceof Error ? cause.message : "Your feedback could not be sent.");
+    } finally {
+      setSubmittingFeedback(false);
+    }
+  };
+
   const progress: Progress = session?.progress ?? {
     attempted: 0,
     correct: 0,
@@ -454,6 +476,33 @@ function App() {
           </div>
           <footer className="app-footer"><span>PYTHON, ONE SMALL WIN AT A TIME.</span><span>PYTHON BASICS</span></footer>
         </main>
+      )}
+      {authSession && (
+        <section className="feedback-section wrap" aria-labelledby="feedback-title">
+          <div className="feedback-copy">
+            <div className="eyebrow"><span className="eyebrow-line" /> HELP US IMPROVE</div>
+            <h2 id="feedback-title">Share your feedback.</h2>
+            <p>Your comments help us make PythonBuddy better for learners.</p>
+          </div>
+          <form className="feedback-form" onSubmit={(event) => void sendFeedback(event)}>
+            <label htmlFor="learner-feedback">What’s working well, or what could be better?</label>
+            <textarea
+              id="learner-feedback"
+              value={feedback}
+              onChange={(event) => setFeedback(event.target.value)}
+              placeholder="Share a suggestion or tell us about your experience..."
+              maxLength={2000}
+              rows={4}
+              required
+              disabled={submittingFeedback}
+            />
+            {feedbackError && <p className="error-banner" role="alert">{feedbackError}</p>}
+            {feedbackNotice && <p className="auth-notice" role="status">{feedbackNotice}</p>}
+            <button className="primary-button feedback-submit" type="submit" disabled={submittingFeedback || !feedback.trim()}>
+              {submittingFeedback ? "Sending..." : "Send feedback"}
+            </button>
+          </form>
+        </section>
       )}
     </div>
   );

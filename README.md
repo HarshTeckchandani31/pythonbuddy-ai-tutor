@@ -16,7 +16,7 @@ Copy-Item .env.example .env
 Copy-Item frontend\.env.example frontend\.env.local
 ```
 
-1. Create a Supabase project. In its SQL Editor, run [`supabase/schema.sql`](./supabase/schema.sql).
+1. Create a Supabase project. In its SQL Editor, run the latest [`supabase/schema.sql`](./supabase/schema.sql). If you've already run an earlier version, run this updated script again to create the feedback table.
 2. In Supabase **Project Settings → API Keys**, copy the project URL, publishable key, and **service_role** key. The service-role key is secret; never put it in the frontend or share it.
 3. In the workspace-root `.env`, set `AI_PROVIDER=gemini`, `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. Set `GEMINI_MODEL=gemini-3.8-flash`.
 4. In `frontend/.env.local`, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` to the same project URL and publishable key. The publishable key is intended for browser use; database tables deny direct access to browser roles.
@@ -64,7 +64,7 @@ Open http://localhost:3000. The React frontend and FastAPI `/api` routes share t
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | empty | Supabase publishable key for browser sign-in |
 
 ## Accounts and saved data
-Email and password registration/sign-in are provided by Supabase Auth. Supabase manages account credentials and email confirmation; the app stores the account email and learner preferences in `learner_profiles`. Each learner's sessions, progress, and private answer keys are stored in `learning_sessions`. Both application tables have RLS enabled and deny access to `anon` and `authenticated`; only the backend uses the server-only service-role key, after verifying the user's access token and filtering every session query by that user's ID. Do not expose the service-role key. Sessions created before this Supabase setup are not migrated.
+Email and password registration/sign-in are provided by Supabase Auth. Supabase manages account credentials and email confirmation; the app stores the account email and learner preferences in `learner_profiles`. Each learner's sessions, progress, and private answer keys are stored in `learning_sessions`. Signed-in learners can submit feedback from the bottom-of-page feedback form; feedback is stored with the authenticated account in `learner_feedback`. All application tables have RLS enabled and deny access to `anon` and `authenticated`; only the backend uses the server-only service-role key, after verifying the user's access token. Do not expose the service-role key. Sessions created before this Supabase setup are not migrated.
 
 ## API contract
 All routes are prefixed with `/api`; request and response schemas are defined in `backend/app/schemas.py`.
@@ -72,6 +72,7 @@ All routes are prefixed with `/api`; request and response schemas are defined in
 | Method and path | Request | Response |
 | --- | --- | --- |
 | `GET /health` | none | Service and AI configuration status |
+| `POST /feedback` | `{feedback}` (authenticated; 1-2000 characters) | Confirmation; stored with the signed-in user's ID |
 | `POST /sessions` | `{name, level, difficulty, topic}` | Session ID, profile, zeroed progress |
 | `POST /sessions/{id}/learn` | `{topic?}` | Explanation, Python example, check question |
 | `POST /sessions/{id}/doubt` | `{question}` | Answer and follow-up question |
@@ -107,7 +108,7 @@ The repository is configured for Vercel's FastAPI runtime. The Vercel build scri
    - Frontend build-time: `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`, using the same Supabase project URL and publishable key. `VITE_API_BASE_URL` can be omitted; the default `/api` uses the same Vercel domain.
    - Never add `SUPABASE_SERVICE_ROLE_KEY` or `GEMINI_API_KEY` as `VITE_` variables. Do not commit `.env` files.
 3. Redeploy after adding or changing environment variables. The frontend variables are embedded at build time, so a new deployment is needed for frontend changes to take effect.
-4. In Supabase **Authentication → URL Configuration**, set the production Site URL to your Vercel domain and add that domain to the allowed redirect URLs. Run [`supabase/schema.sql`](./supabase/schema.sql) in the same Supabase project's SQL Editor if the tables are not already present.
+4. In Supabase **Authentication → URL Configuration**, set the production Site URL to your Vercel domain and add that domain to the allowed redirect URLs. Run the latest [`supabase/schema.sql`](./supabase/schema.sql) in the same Supabase project's SQL Editor; if you previously applied the older script, rerun it to create `learner_feedback`.
 
 The Vercel API and frontend share one origin. `CORS_ORIGINS` is only needed if you separately host a frontend; for a separate frontend deployment, include its exact origin. To run locally instead, use the steps above and `npm start`.
 

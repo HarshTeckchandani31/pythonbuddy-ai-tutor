@@ -92,6 +92,22 @@ def test_health_and_session_initialization() -> None:
     assert latest.json()["session_id"] == session_id
 
 
+def test_feedback_is_saved_for_authenticated_user_and_validated() -> None:
+    unauthenticated = TestClient(create_app(settings=Settings()))
+    assert unauthenticated.post("/api/feedback", json={"feedback": "Hello"}).status_code == 401
+
+    repository = InMemorySessionRepository()
+    client = make_client(FakeProvider(), repository=repository)
+
+    response = client.post("/api/feedback", json={"feedback": "  Great lesson!  "})
+
+    assert response.status_code == 201
+    assert response.json() == {"message": "Thanks for sharing your feedback."}
+    assert repository.feedback_entries == [(TEST_USER_ID, "Great lesson!")]
+    assert client.post("/api/feedback", json={"feedback": "   "}).status_code == 422
+    assert client.post("/api/feedback", json={"feedback": "x" * 2001}).status_code == 422
+
+
 def test_frontend_and_api_share_one_origin() -> None:
     client = make_client(FakeProvider())
     response = client.get("/")

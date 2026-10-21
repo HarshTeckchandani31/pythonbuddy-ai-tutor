@@ -35,6 +35,8 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
 }
 
 export const tutorApi = {
+  submitFeedback: (feedback: string) =>
+    request<{ message: string }>("/feedback", { feedback }),
   createSession: (profile: LearnerProfile) => request<LearnerSession>("/sessions", profile),
   getLatestSession: () => request<LearnerSession | null>("/sessions/latest"),
   learn: (sessionId: string, topic: string) =>

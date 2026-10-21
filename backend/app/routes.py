@@ -5,6 +5,8 @@ from backend.app.schemas import (
     HealthResponse,
     DoubtContent,
     DoubtRequest,
+    FeedbackRequest,
+    FeedbackResponse,
     InitializeSessionRequest,
     LessonContent,
     LessonRequest,
@@ -44,6 +46,16 @@ async def health(request: Request) -> HealthResponse:
             settings.gemini_api_key if settings.ai_provider == "gemini" else settings.anthropic_api_key
         ),
     )
+
+
+@router.post("/feedback", response_model=FeedbackResponse, status_code=status.HTTP_201_CREATED)
+async def submit_feedback(
+    payload: FeedbackRequest,
+    request: Request,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> FeedbackResponse:
+    await repository_from(request).submit_feedback(user, payload.feedback)
+    return FeedbackResponse(message="Thanks for sharing your feedback.")
 
 
 @router.post("/sessions", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)

@@ -37,6 +37,8 @@ class SupabaseUnavailable(Exception):
 class SessionRepository(Protocol):
     async def authenticate(self, access_token: str) -> AuthenticatedUser: ...
 
+    async def submit_feedback(self, user: AuthenticatedUser, feedback: str) -> None: ...
+
     async def create_session(
         self,
         user: AuthenticatedUser,
@@ -117,6 +119,14 @@ class SupabaseSessionRepository:
         except (ValueError, TypeError, KeyError, AttributeError) as exc:
             raise SupabaseUnavailable("Supabase Auth returned an invalid user") from exc
         return AuthenticatedUser(user_id=user_id, email=email, full_name=full_name)
+
+    async def submit_feedback(self, user: AuthenticatedUser, feedback: str) -> None:
+        await self._database_request(
+            "POST",
+            "learner_feedback",
+            json_body={"user_id": user.user_id, "feedback": feedback},
+            prefer="return=minimal",
+        )
 
     def _database_headers(self) -> dict[str, str]:
         self._require_database_config()
@@ -315,9 +325,13 @@ class SupabaseSessionRepository:
 class InMemorySessionRepository:
     def __init__(self) -> None:
         self._sessions: dict[str, tuple[str, LearningSession]] = {}
+        self.feedback_entries: list[tuple[str, str]] = []
 
     async def authenticate(self, access_token: str) -> AuthenticatedUser:
         raise NotImplementedError
+
+    async def submit_feedback(self, user: AuthenticatedUser, feedback: str) -> None:
+        self.feedback_entries.append((user.user_id, feedback))
 
     async def create_session(
         self,

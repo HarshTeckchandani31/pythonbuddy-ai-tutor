@@ -74,9 +74,25 @@ class DoubtRequest(BaseModel):
     question: Annotated[str, Field(min_length=1, max_length=1200)]
 
 
+class FeedbackRequest(BaseModel):
+    feedback: Annotated[str, Field(min_length=1, max_length=2000)]
+
+    @field_validator("feedback")
+    @classmethod
+    def feedback_is_not_blank(cls, feedback: str) -> str:
+        feedback = feedback.strip()
+        if not feedback:
+            raise ValueError("feedback must not be blank")
+        return feedback
+
+
 class DoubtContent(BaseModel):
     answer: Annotated[str, Field(min_length=1, max_length=4000)]
     follow_up_question: Annotated[str, Field(min_length=1, max_length=500)]
+
+
+class FeedbackResponse(BaseModel):
+    message: str
 
 
 class QuestionDraft(BaseModel):

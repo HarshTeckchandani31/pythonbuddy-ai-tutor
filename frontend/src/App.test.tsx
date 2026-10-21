@@ -18,6 +18,7 @@ vi.mock("./api", () => ({
     submitQuizAnswer: vi.fn(),
     getProgress: vi.fn(),
     getSummary: vi.fn(),
+    submitFeedback: vi.fn(),
   },
 }));
 
@@ -87,6 +88,7 @@ beforeEach(() => {
   vi.mocked(authApi.getSession).mockResolvedValue(null);
   vi.mocked(authApi.signUp).mockResolvedValue(authSession);
   vi.mocked(tutorApi.getLatestSession).mockResolvedValue(null);
+  vi.mocked(tutorApi.submitFeedback).mockResolvedValue({ message: "Thanks for sharing your feedback." });
   vi.mocked(tutorApi.createSession).mockResolvedValue(session);
   vi.mocked(tutorApi.learn).mockResolvedValue({
     explanation: "A variable stores a value.",
@@ -148,6 +150,17 @@ describe("PythonBuddy workspace", () => {
     expect(screen.getByRole("heading", { name: /python variables/i })).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
     expect(screen.getByText("0 attempts")).toBeInTheDocument();
+  });
+
+  it("submits feedback and confirms it was received", async () => {
+    const user = await startApp();
+    const feedback = screen.getByLabelText("What’s working well, or what could be better?");
+    await user.type(feedback, "More examples would help.");
+    await user.click(screen.getByRole("button", { name: "Send feedback" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Thanks for sharing your feedback.");
+    expect(tutorApi.submitFeedback).toHaveBeenCalledWith("More examples would help.");
+    expect(feedback).toHaveValue("");
   });
 
   it("uses the recorded practice response to update progress", async () => {

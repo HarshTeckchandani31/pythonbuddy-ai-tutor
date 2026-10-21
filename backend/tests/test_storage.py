@@ -152,6 +152,38 @@ def test_supabase_create_and_update_persist_account_profile_and_session_state() 
     ]
 
 
+def test_supabase_feedback_storage_uses_authenticated_user_id() -> None:
+    user_id = str(uuid4())
+    inserted_rows: list[dict[str, object]] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path.endswith("/rest/v1/learner_feedback")
+        assert request.headers["apikey"] == "server-only-test-key"
+        inserted_rows.append(json.loads(request.content))
+        return httpx.Response(201)
+
+    repository = SupabaseSessionRepository(
+        Settings(
+            supabase_url="https://example.supabase.co",
+            supabase_service_role_key="server-only-test-key",
+        ),
+        transport=httpx.MockTransport(respond),
+    )
+
+    async def submit_and_close() -> None:
+        try:
+            await repository.submit_feedback(
+                AuthenticatedUser(user_id, "riya@example.com", "Riya"),
+                "A helpful lesson.",
+            )
+        finally:
+            await repository.close()
+
+    asyncio.run(submit_and_close())
+    assert inserted_rows == [{"user_id": user_id, "feedback": "A helpful lesson."}]
+
+
 def test_supabase_auth_validates_access_token_and_extracts_verified_identity() -> None:
     user_id = str(uuid4())
 
