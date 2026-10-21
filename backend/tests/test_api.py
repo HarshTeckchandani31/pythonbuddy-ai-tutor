@@ -88,6 +88,7 @@ def test_health_and_session_initialization() -> None:
         "status": "ok",
         "provider": "gemini",
         "ai_configured": True,
+        "provider_timeout_seconds": 55,
     }
     session_id = create_session(client)
     assert client.get(f"/api/sessions/{session_id}/progress").status_code == 200

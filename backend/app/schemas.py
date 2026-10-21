@@ -257,6 +257,7 @@ class HealthResponse(BaseModel):
     status: str
     provider: str
     ai_configured: bool
+    provider_timeout_seconds: float
 
 
 class ErrorResponse(BaseModel):

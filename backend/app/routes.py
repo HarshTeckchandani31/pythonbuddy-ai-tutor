@@ -55,6 +55,7 @@ async def health(request: Request) -> HealthResponse:
         ai_configured=bool(
             settings.gemini_api_key if settings.ai_provider == "gemini" else settings.anthropic_api_key
         ),
+        provider_timeout_seconds=settings.provider_timeout_seconds,
     )
 
 
