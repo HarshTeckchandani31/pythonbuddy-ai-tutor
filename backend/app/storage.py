@@ -130,7 +130,7 @@ class SupabaseSessionRepository:
 
     def _require_database_config(self) -> None:
         if not self._is_configured(self._settings.supabase_url) or not self._is_configured(
-            self._settings.supabase_service_role_key
+            self._settings.supabase_server_key
         ):
             raise SupabaseUnavailable("Supabase database access is not configured")
 
@@ -270,11 +270,14 @@ class SupabaseSessionRepository:
 
     def _admin_headers(self) -> dict[str, str]:
         self._require_database_config()
-        return {
-            "apikey": self._settings.supabase_service_role_key,
-            "authorization": f"******",
+        key = self._settings.supabase_server_key
+        headers = {
+            "apikey": key,
             "content-type": "application/json",
         }
+        if not key.startswith("sb_secret_"):
+            headers["authorization"] = " ".join(("Bearer", key))
+        return headers
 
     async def _admin_auth_request(
         self,
@@ -394,11 +397,15 @@ class SupabaseSessionRepository:
 
     def _database_headers(self) -> dict[str, str]:
         self._require_database_config()
-        return {
-            "apikey": self._settings.supabase_service_role_key,
+        key = self._settings.supabase_server_key
+        headers = {
+            "apikey": key,
             "authorization": f"Bearer {self._settings.supabase_service_role_key}",
             "content-type": "application/json",
         }
+        if key.startswith("sb_secret_"):
+            headers.pop("authorization", None)
+        return headers
 
     async def _database_request(
         self,

@@ -13,6 +13,7 @@ class Settings:
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
     supabase_url: str = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
     supabase_publishable_key: str = os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip()
+    supabase_secret_key: str = os.getenv("SUPABASE_SECRET_KEY", "").strip()
     supabase_service_role_key: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     admin_email: str = os.getenv("ADMIN_EMAIL", "").strip().casefold()
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "").strip()
@@ -24,6 +25,10 @@ class Settings:
         for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
         if origin.strip()
     )
+
+    @property
+    def supabase_server_key(self) -> str:
+        return self.supabase_secret_key or self.supabase_service_role_key
 
     def __post_init__(self) -> None:
         if not 0 < self.provider_timeout_seconds <= 120:

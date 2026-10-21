@@ -17,8 +17,8 @@ Copy-Item frontend\.env.example frontend\.env.local
 ```
 
 1. Create a Supabase project. In its SQL Editor, run the latest [`supabase/schema.sql`](./supabase/schema.sql). Rerun it after updates to add features such as feedback moderation and account suspension.
-2. In Supabase **Project Settings → API Keys**, copy the project URL, publishable key, and **service_role** key. The service-role key is secret; never put it in the frontend or share it.
-3. In the workspace-root `.env`, set `AI_PROVIDER=gemini`, `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. Set `ADMIN_EMAIL` to the exact email of your administrator account; leave it blank to disable administrator access. Set `GEMINI_MODEL=gemini-3.8-flash`.
+2. In Supabase **Project Settings → API Keys**, copy the project URL, publishable key, and a server-only **secret** key. Never put the secret key in the frontend or share it.
+3. In the workspace-root `.env`, set `AI_PROVIDER=gemini`, `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY`. `SUPABASE_SERVICE_ROLE_KEY` remains supported for legacy service-role JWT keys. Set `ADMIN_EMAIL` to the exact email of your administrator account; leave it blank to disable administrator access. Set `GEMINI_MODEL=gemini-3.8-flash`.
 4. In `frontend/.env.local`, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` to the same project URL and publishable key. The publishable key is intended for browser use; database tables deny direct access to browser roles.
 5. In Supabase **Authentication → URL Configuration**, set the local Site URL to `http://localhost:3000` and add it to the redirect URLs. Email/password sign-up uses Supabase email confirmation when enabled in **Authentication → Providers → Email**.
 
@@ -53,7 +53,8 @@ Open http://localhost:3000. The React frontend and FastAPI `/api` routes share t
 | `GEMINI_MODEL` | `gemini-3.8-flash` | Gemini model identifier |
 | `SUPABASE_URL` | empty | Supabase project URL used by the backend |
 | `SUPABASE_PUBLISHABLE_KEY` | empty | Backend key used to verify Supabase user access tokens |
-| `SUPABASE_SERVICE_ROLE_KEY` | empty | Server-only key for the backend's protected database operations |
+| `SUPABASE_SECRET_KEY` | empty | Recommended server-only Supabase key for protected database and Auth Admin operations |
+| `SUPABASE_SERVICE_ROLE_KEY` | empty | Legacy server-only service-role JWT key; used when `SUPABASE_SECRET_KEY` is unset |
 | `ADMIN_EMAIL` | empty | Exact email allowlisted for the sole administrator; server-side only |
 | `ANTHROPIC_API_KEY` | empty | Optional server-side Anthropic credential |
 | `ANTHROPIC_MODEL` | `claude-haiku-4-5-20251001` | Anthropic model identifier |
@@ -115,9 +116,9 @@ The repository is configured for Vercel's FastAPI runtime. The Vercel build scri
 
 1. Push this project to a GitHub repository and import that repository in Vercel. Set the project root to the repository root and the Framework Preset to **Other** so Vercel uses the Python entrypoint in `pyproject.toml`.
 2. Add these environment variables in Vercel **Project Settings → Environment Variables**. Set them for Production and Preview environments as needed:
-   - Server-only: `AI_PROVIDER=gemini`, `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-3.8-flash`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `ADMIN_EMAIL` (the exact email for your Supabase administrator account).
+   - Server-only: `AI_PROVIDER=gemini`, `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-3.8-flash`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` (or the legacy `SUPABASE_SERVICE_ROLE_KEY`), and `ADMIN_EMAIL` (the exact email for your Supabase administrator account).
    - Frontend build-time: `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`, using the same Supabase project URL and publishable key. `VITE_API_BASE_URL` can be omitted; the default `/api` uses the same Vercel domain.
-   - Never add `SUPABASE_SERVICE_ROLE_KEY` or `GEMINI_API_KEY` as `VITE_` variables. Do not commit `.env` files.
+   - Never add `SUPABASE_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, or `GEMINI_API_KEY` as `VITE_` variables. Do not commit `.env` files.
 3. Redeploy after adding or changing environment variables. The frontend variables are embedded at build time, so a new deployment is needed for frontend changes to take effect.
 4. In Supabase **Authentication → URL Configuration**, set the production Site URL to your Vercel domain and add that domain to the allowed redirect URLs. Run the latest [`supabase/schema.sql`](./supabase/schema.sql) in the same Supabase project's SQL Editor; rerun it after this update to add feedback moderation and account suspension support.
 

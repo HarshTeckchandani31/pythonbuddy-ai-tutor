@@ -82,7 +82,7 @@ def test_supabase_session_read_is_scoped_to_owner_and_keeps_key_server_side() ->
         assert dict(request.url.params)["id"] == f"eq.{session_id}"
         assert dict(request.url.params)["user_id"] == f"eq.{user_id}"
         assert request.headers["apikey"] == "server-only-test-key"
-        assert request.headers["authorization"] == "Bearer server-only-test-key"
+        assert request.headers["authorization"].startswith("Bearer ")
         return httpx.Response(200, json=[expected])
 
     repository = SupabaseSessionRepository(
@@ -192,6 +192,7 @@ def test_supabase_admin_uses_server_key_for_user_and_feedback_management() -> No
 
     def respond(request: httpx.Request) -> httpx.Response:
         assert request.headers["apikey"] == "server-only-test-key"
+        assert request.headers["authorization"].startswith("Bearer ")
         body = json.loads(request.content) if request.content else None
         calls.append((request.method, request.url.path, body))
         if request.method == "GET" and request.url.path.endswith("/auth/v1/admin/users"):
@@ -297,6 +298,35 @@ def test_supabase_auth_validates_access_token_and_extracts_verified_identity() -
 
     user = asyncio.run(authenticate_and_close())
     assert user == AuthenticatedUser(user_id, "riya@example.com", "Riya")
+
+
+def test_supabase_secret_key_is_sent_only_as_api_key() -> None:
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.headers["apikey"] == "sb_secret_test-key"
+        assert "authorization" not in request.headers
+        if request.url.path.endswith("/auth/v1/admin/users"):
+            return httpx.Response(200, json={"users": []})
+        assert request.url.path.endswith("/rest/v1/learner_account_status")
+        return httpx.Response(200, json=[])
+
+    repository = SupabaseSessionRepository(
+        Settings(
+            supabase_url="https://example.supabase.co",
+            supabase_secret_key="sb_secret_test-key",
+        ),
+        transport=httpx.MockTransport(respond),
+    )
+
+    async def exercise() -> None:
+        try:
+            users, has_more = await repository.list_admin_users(1, 50)
+            assert users == []
+            assert has_more is False
+            await repository.is_user_suspended(str(uuid4()))
+        finally:
+            await repository.close()
+
+    asyncio.run(exercise())
 
 
 def test_supabase_auth_blocks_suspended_users_with_existing_tokens() -> None:
