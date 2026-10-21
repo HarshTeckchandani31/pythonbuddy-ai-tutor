@@ -1,3 +1,14 @@
+[project]
+name = "pythonbuddy-ai-tutor"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.153,<1",
+    "httpx>=0.28,<1",
+    "pydantic>=2.10,<3",
+    "python-dotenv>=1.0,<2",
+]
+
 [tool.vercel]
 entrypoint = "backend.app.main:app"
 
