@@ -17,7 +17,7 @@ class Settings:
     admin_email: str = os.getenv("ADMIN_EMAIL", "").strip().casefold()
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "").strip()
     anthropic_model: str = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001").strip()
-    provider_timeout_seconds: float = float(os.getenv("AI_TIMEOUT_SECONDS", "20"))
+    provider_timeout_seconds: float = float(os.getenv("AI_TIMEOUT_SECONDS", "45"))
     max_request_bytes: int = int(os.getenv("MAX_REQUEST_BYTES", "65536"))
     cors_origins: tuple[str, ...] = tuple(
         origin.strip()

@@ -57,7 +57,7 @@ Open http://localhost:3000. The React frontend and FastAPI `/api` routes share t
 | `ADMIN_EMAIL` | empty | Exact email allowlisted for the sole administrator; server-side only |
 | `ANTHROPIC_API_KEY` | empty | Optional server-side Anthropic credential |
 | `ANTHROPIC_MODEL` | `claude-haiku-4-5-20251001` | Anthropic model identifier |
-| `AI_TIMEOUT_SECONDS` | `20` | Provider request timeout |
+| `AI_TIMEOUT_SECONDS` | `45` | Provider request timeout (keep below the Vercel function's 60-second maximum) |
 | `MAX_REQUEST_BYTES` | `65536` | Maximum JSON request size |
 | `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated allowed frontend origins |
 | `VITE_API_BASE_URL` | `/api` | Frontend API base; set to `https://your-api.example/api` when deployed separately |
