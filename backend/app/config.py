@@ -14,6 +14,7 @@ class Settings:
     supabase_url: str = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
     supabase_publishable_key: str = os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip()
     supabase_service_role_key: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    admin_email: str = os.getenv("ADMIN_EMAIL", "").strip().casefold()
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "").strip()
     anthropic_model: str = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001").strip()
     provider_timeout_seconds: float = float(os.getenv("AI_TIMEOUT_SECONDS", "20"))

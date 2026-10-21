@@ -5,6 +5,7 @@ from backend.app.storage import (
     AuthenticatedUser,
     InvalidAccessToken,
     SessionRepository,
+    SuspendedAccount,
     SupabaseUnavailable,
 )
 
@@ -26,6 +27,11 @@ async def get_current_user(
     repository: SessionRepository = request.app.state.session_repository
     try:
         return await repository.authenticate(credentials.credentials)
+    except SuspendedAccount as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been suspended. Contact the administrator.",
+        ) from exc
     except InvalidAccessToken as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -37,3 +43,18 @@ async def get_current_user(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         ) from exc
+
+
+async def get_admin_user(
+    request: Request,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> AuthenticatedUser:
+    admin_email = request.app.state.settings.admin_email.strip().casefold()
+    if not admin_email:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Admin access is not configured. Set ADMIN_EMAIL on the server.",
+        )
+    if user.email.casefold() != admin_email:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrator access required.")
+    return user

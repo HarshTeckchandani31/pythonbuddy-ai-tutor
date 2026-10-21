@@ -11,6 +11,7 @@ from backend.app.sessions import Attempt, LearningSession, QuizItem
 from backend.app.storage import (
     AuthenticatedUser,
     InvalidAccessToken,
+    SuspendedAccount,
     SupabaseUnavailable,
     SupabaseSessionRepository,
 )
@@ -184,10 +185,89 @@ def test_supabase_feedback_storage_uses_authenticated_user_id() -> None:
     assert inserted_rows == [{"user_id": user_id, "feedback": "A helpful lesson."}]
 
 
+def test_supabase_admin_uses_server_key_for_user_and_feedback_management() -> None:
+    learner_user_id = str(uuid4())
+    feedback_id = str(uuid4())
+    calls: list[tuple[str, str, dict[str, object] | None]] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.headers["apikey"] == "server-only-test-key"
+        body = json.loads(request.content) if request.content else None
+        calls.append((request.method, request.url.path, body))
+        if request.method == "GET" and request.url.path.endswith("/auth/v1/admin/users"):
+            assert dict(request.url.params) == {"page": "1", "per_page": "1"}
+            return httpx.Response(
+                200,
+                json={
+                    "users": [
+                        {
+                            "id": learner_user_id,
+                            "email": "riya@example.com",
+                            "user_metadata": {"full_name": "Riya"},
+                            "created_at": "2026-01-01T00:00:00Z",
+                            "last_sign_in_at": None,
+                            "banned_until": None,
+                        }
+                    ]
+                },
+            )
+        if request.method == "GET" and request.url.path.endswith("/rest/v1/learner_feedback"):
+            assert dict(request.url.params)["is_featured"] == "eq.true"
+            return httpx.Response(200, json=[{"feedback": "A helpful tutor."}])
+        if request.method == "PATCH" and request.url.path.endswith("/rest/v1/learner_feedback"):
+            return httpx.Response(200, json=[{"id": feedback_id}])
+        if request.method == "POST" and request.url.path.endswith("/rest/v1/learner_account_status"):
+            return httpx.Response(201)
+        if request.url.path.endswith(f"/auth/v1/admin/users/{learner_user_id}"):
+            return httpx.Response(204)
+        raise AssertionError(f"Unexpected Supabase request: {request.method} {request.url}")
+
+    repository = SupabaseSessionRepository(
+        Settings(
+            supabase_url="https://example.supabase.co",
+            supabase_service_role_key="server-only-test-key",
+        ),
+        transport=httpx.MockTransport(respond),
+    )
+
+    async def exercise_admin_actions() -> tuple[list[object], bool, list[str]]:
+        try:
+            users, has_more = await repository.list_admin_users(1, 1)
+            featured = await repository.get_featured_feedback()
+            await repository.set_feedback_featured(feedback_id, True)
+            await repository.set_user_suspended(learner_user_id, True)
+            await repository.set_user_suspended(learner_user_id, False)
+            await repository.delete_user(learner_user_id)
+            return users, has_more, featured
+        finally:
+            await repository.close()
+
+    users, has_more, featured = asyncio.run(exercise_admin_actions())
+    assert len(users) == 1
+    assert users[0].user_id == learner_user_id
+    assert users[0].email == "riya@example.com"
+    assert has_more is True
+    assert featured == ["A helpful tutor."]
+    assert ("PATCH", "/rest/v1/learner_feedback", {"is_featured": True}) in calls
+    suspension_updates = [
+        body for method, path, body in calls
+        if method == "POST" and path == "/rest/v1/learner_account_status"
+    ]
+    assert [body["suspended"] for body in suspension_updates if body] == [True, False]
+    assert all(body and body["user_id"] == learner_user_id and body["updated_at"] for body in suspension_updates)
+    assert ("PUT", f"/auth/v1/admin/users/{learner_user_id}", {"ban_duration": "876000h"}) in calls
+    assert ("PUT", f"/auth/v1/admin/users/{learner_user_id}", {"ban_duration": "none"}) in calls
+    assert ("DELETE", f"/auth/v1/admin/users/{learner_user_id}", None) in calls
+
+
 def test_supabase_auth_validates_access_token_and_extracts_verified_identity() -> None:
     user_id = str(uuid4())
 
     def respond(request: httpx.Request) -> httpx.Response:
+        if not request.url.path.endswith("/auth/v1/user"):
+            assert request.url.path.endswith("/rest/v1/learner_account_status")
+            assert request.headers["apikey"] == "server-only-test-key"
+            return httpx.Response(200, json=[])
         assert request.url.path.endswith("/auth/v1/user")
         assert request.headers["apikey"] == "public-test-key"
         assert request.headers["authorization"] == "Bearer valid-access-token"
@@ -204,6 +284,7 @@ def test_supabase_auth_validates_access_token_and_extracts_verified_identity() -
         Settings(
             supabase_url="https://example.supabase.co",
             supabase_publishable_key="public-test-key",
+            supabase_service_role_key="server-only-test-key",
         ),
         transport=httpx.MockTransport(respond),
     )
@@ -216,6 +297,37 @@ def test_supabase_auth_validates_access_token_and_extracts_verified_identity() -
 
     user = asyncio.run(authenticate_and_close())
     assert user == AuthenticatedUser(user_id, "riya@example.com", "Riya")
+
+
+def test_supabase_auth_blocks_suspended_users_with_existing_tokens() -> None:
+    user_id = str(uuid4())
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/auth/v1/user"):
+            return httpx.Response(
+                200,
+                json={"id": user_id, "email": "riya@example.com", "user_metadata": {}},
+            )
+        assert request.url.path.endswith("/rest/v1/learner_account_status")
+        return httpx.Response(200, json=[{"suspended": True}])
+
+    repository = SupabaseSessionRepository(
+        Settings(
+            supabase_url="https://example.supabase.co",
+            supabase_publishable_key="public-test-key",
+            supabase_service_role_key="server-only-test-key",
+        ),
+        transport=httpx.MockTransport(respond),
+    )
+
+    async def authenticate_and_close() -> None:
+        try:
+            await repository.authenticate("valid-access-token")
+        finally:
+            await repository.close()
+
+    with pytest.raises(SuspendedAccount):
+        asyncio.run(authenticate_and_close())
 
 
 def test_supabase_auth_rejects_invalid_access_token() -> None:

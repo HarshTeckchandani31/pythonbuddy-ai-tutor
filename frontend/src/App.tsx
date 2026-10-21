@@ -15,7 +15,8 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { tutorApi } from "./api";
+import { publicApi, tutorApi } from "./api";
+import AdminApp from "./AdminApp";
 import { authApi, supabaseConfigured, type AuthSession } from "./auth";
 import type {
   DoubtContent,
@@ -63,6 +64,10 @@ function answerText(answer: { correct: boolean; feedback: string; correct_answer
 }
 
 function App() {
+  return window.location.pathname === "/admin" ? <AdminApp /> : <LearnerApp />;
+}
+
+function LearnerApp() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -86,6 +91,8 @@ function App() {
   const [feedbackNotice, setFeedbackNotice] = useState("");
   const [feedbackError, setFeedbackError] = useState("");
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [featuredFeedback, setFeaturedFeedback] = useState<string[]>([]);
+  const [featuredFeedbackError, setFeaturedFeedbackError] = useState("");
 
   const addMessage = (message: Message) => setMessages((current) => [...current, message]);
 
@@ -114,6 +121,20 @@ function App() {
     return () => {
       active = false;
       unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void publicApi.getFeaturedFeedback()
+      .then((result) => {
+        if (active) setFeaturedFeedback(result.feedback);
+      })
+      .catch(() => {
+        if (active) setFeaturedFeedbackError("Learner feedback could not be loaded. Refresh to try again.");
+      });
+    return () => {
+      active = false;
     };
   }, []);
 
@@ -379,6 +400,13 @@ function App() {
             <p className="intro">Create an account to save your learner profile and progress across visits.</p>
             <div className="promise-row"><span className="promise-icon">01</span><span>Your lessons stay with your account.</span></div>
             <div className="promise-row"><span className="promise-icon">02</span><span>Sign in anywhere to pick up again.</span></div>
+            {featuredFeedback.length > 0 && (
+              <section className="published-feedback" aria-label="Learner feedback">
+                <div className="eyebrow"><span className="eyebrow-line" /> LEARNER NOTES</div>
+                {featuredFeedback.map((item, index) => <blockquote key={`${index}-${item}`}>{item}</blockquote>)}
+              </section>
+            )}
+            {featuredFeedbackError && <p className="published-feedback-error" role="status">{featuredFeedbackError}</p>}
           </section>
           <form className="setup-form" onSubmit={(event) => void authenticate(event)}>
             <div className="form-heading"><span className="step-label">ACCOUNT</span><span className="step-number">SUPABASE AUTH</span></div>
@@ -404,6 +432,7 @@ function App() {
             <button className="auth-switch" type="button" disabled={loading} onClick={() => { setAuthMode(authMode === "signup" ? "signin" : "signup"); setError(""); setAuthNotice(""); }}>
               {authMode === "signup" ? "Already have an account? Sign in" : "New here? Create an account"}
             </button>
+            <a className="admin-login-link" href="/admin">Administrator sign in</a>
           </form>
         </main>
       ) : !session ? (

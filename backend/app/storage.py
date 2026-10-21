@@ -26,7 +26,37 @@ class AuthenticatedUser:
     full_name: str
 
 
+@dataclass(frozen=True)
+class AdminUser:
+    user_id: str
+    email: str
+    full_name: str
+    created_at: str
+    last_sign_in_at: str | None
+    banned_until: str | None
+
+
+@dataclass(frozen=True)
+class FeedbackEntry:
+    id: str
+    user_id: str
+    feedback: str
+    created_at: str
+    is_featured: bool
+
+
+@dataclass(frozen=True)
+class AdminLearningSession:
+    session: LearningSession
+    created_at: str
+    updated_at: str
+
+
 class InvalidAccessToken(Exception):
+    pass
+
+
+class SuspendedAccount(Exception):
     pass
 
 
@@ -38,6 +68,22 @@ class SessionRepository(Protocol):
     async def authenticate(self, access_token: str) -> AuthenticatedUser: ...
 
     async def submit_feedback(self, user: AuthenticatedUser, feedback: str) -> None: ...
+
+    async def get_featured_feedback(self) -> list[str]: ...
+
+    async def list_feedback(self) -> list[FeedbackEntry]: ...
+
+    async def set_feedback_featured(self, feedback_id: str, is_featured: bool) -> None: ...
+
+    async def is_user_suspended(self, user_id: str) -> bool: ...
+
+    async def list_admin_users(self, page: int, page_size: int) -> tuple[list[AdminUser], bool]: ...
+
+    async def get_admin_sessions(self, user_id: str) -> list[AdminLearningSession]: ...
+
+    async def set_user_suspended(self, user_id: str, suspended: bool) -> None: ...
+
+    async def delete_user(self, user_id: str) -> None: ...
 
     async def create_session(
         self,
@@ -118,7 +164,40 @@ class SupabaseSessionRepository:
                 raise ValueError("Invalid Supabase user data")
         except (ValueError, TypeError, KeyError, AttributeError) as exc:
             raise SupabaseUnavailable("Supabase Auth returned an invalid user") from exc
+        if await self.is_user_suspended(user_id):
+            raise SuspendedAccount
         return AuthenticatedUser(user_id=user_id, email=email, full_name=full_name)
+
+    async def is_user_suspended(self, user_id: str) -> bool:
+        normalized_id = str(UUID(user_id))
+        response = await self._database_request(
+            "GET",
+            "learner_account_status",
+            params={
+                "select": "suspended",
+                "user_id": f"eq.{normalized_id}",
+                "limit": "1",
+            },
+        )
+        rows = self._response_rows(response)
+        if not rows:
+            return False
+        if len(rows) != 1 or not isinstance(rows[0], dict) or not isinstance(rows[0].get("suspended"), bool):
+            raise SupabaseUnavailable("Supabase returned invalid account status")
+        return rows[0]["suspended"]
+
+    async def _set_account_suspension(self, user_id: str, suspended: bool) -> None:
+        await self._database_request(
+            "POST",
+            "learner_account_status",
+            params={"on_conflict": "user_id"},
+            json_body={
+                "user_id": user_id,
+                "suspended": suspended,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            prefer="resolution=merge-duplicates,return=minimal",
+        )
 
     async def submit_feedback(self, user: AuthenticatedUser, feedback: str) -> None:
         await self._database_request(
@@ -127,6 +206,191 @@ class SupabaseSessionRepository:
             json_body={"user_id": user.user_id, "feedback": feedback},
             prefer="return=minimal",
         )
+
+    async def get_featured_feedback(self) -> list[str]:
+        response = await self._database_request(
+            "GET",
+            "learner_feedback",
+            params={
+                "select": "feedback",
+                "is_featured": "eq.true",
+                "order": "created_at.desc",
+            },
+        )
+        rows = self._response_rows(response)
+        if any(not isinstance(row, dict) or not isinstance(row.get("feedback"), str) for row in rows):
+            raise SupabaseUnavailable("Supabase returned invalid featured feedback")
+        return [row["feedback"] for row in rows]
+
+    async def list_feedback(self) -> list[FeedbackEntry]:
+        response = await self._database_request(
+            "GET",
+            "learner_feedback",
+            params={
+                "select": "id,user_id,feedback,created_at,is_featured",
+                "order": "created_at.desc",
+            },
+        )
+        entries: list[FeedbackEntry] = []
+        for row in self._response_rows(response):
+            if not isinstance(row, dict):
+                raise SupabaseUnavailable("Supabase returned invalid feedback")
+            try:
+                feedback = row["feedback"]
+                created_at = row["created_at"]
+                is_featured = row["is_featured"]
+                if not isinstance(feedback, str) or not isinstance(created_at, str) or not isinstance(
+                    is_featured, bool
+                ):
+                    raise ValueError("Invalid feedback fields")
+                entries.append(
+                    FeedbackEntry(
+                        id=str(UUID(str(row["id"]))),
+                        user_id=str(UUID(str(row["user_id"]))),
+                        feedback=feedback,
+                        created_at=created_at,
+                        is_featured=is_featured,
+                    )
+                )
+            except (ValueError, TypeError, KeyError) as exc:
+                raise SupabaseUnavailable("Supabase returned invalid feedback") from exc
+        return entries
+
+    async def set_feedback_featured(self, feedback_id: str, is_featured: bool) -> None:
+        normalized_id = str(UUID(feedback_id))
+        response = await self._database_request(
+            "PATCH",
+            "learner_feedback",
+            params={"id": f"eq.{normalized_id}", "select": "id"},
+            json_body={"is_featured": is_featured},
+            prefer="return=representation",
+        )
+        if not self._response_rows(response):
+            raise SessionNotFound
+
+    def _admin_headers(self) -> dict[str, str]:
+        self._require_database_config()
+        return {
+            "apikey": self._settings.supabase_service_role_key,
+            "authorization": f"******",
+            "content-type": "application/json",
+        }
+
+    async def _admin_auth_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, str] | None = None,
+        json_body: dict[str, object] | None = None,
+    ) -> httpx.Response:
+        client = await self._http_client()
+        try:
+            response = await client.request(
+                method,
+                f"{self._settings.supabase_url}/auth/v1/admin/{path}",
+                params=params,
+                headers=self._admin_headers(),
+                json=json_body,
+            )
+        except httpx.HTTPError as exc:
+            logger.warning("Supabase Admin Auth request failed")
+            raise SupabaseUnavailable from exc
+        if response.is_error:
+            logger.warning("Supabase Admin Auth returned status %s", response.status_code)
+            raise SupabaseUnavailable("Supabase account management request failed")
+        return response
+
+    @staticmethod
+    def _admin_user_from_row(row: object) -> AdminUser:
+        if not isinstance(row, dict):
+            raise SupabaseUnavailable("Supabase returned an invalid user")
+        try:
+            metadata = row.get("user_metadata") or {}
+            if not isinstance(metadata, dict):
+                raise ValueError("Invalid user metadata")
+            email = row["email"]
+            created_at = row["created_at"]
+            if not isinstance(email, str) or not isinstance(created_at, str):
+                raise ValueError("Invalid user identity")
+            full_name = metadata.get("full_name", "")
+            if not isinstance(full_name, str):
+                raise ValueError("Invalid user name")
+            user_id = str(UUID(str(row["id"])))
+            last_sign_in_at = row.get("last_sign_in_at")
+            banned_until = row.get("banned_until")
+            if last_sign_in_at is not None and not isinstance(last_sign_in_at, str):
+                raise ValueError("Invalid last sign-in timestamp")
+            if banned_until is not None and not isinstance(banned_until, str):
+                raise ValueError("Invalid ban timestamp")
+            return AdminUser(
+                user_id=user_id,
+                email=email,
+                full_name=full_name,
+                created_at=created_at,
+                last_sign_in_at=last_sign_in_at,
+                banned_until=banned_until,
+            )
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
+            raise SupabaseUnavailable("Supabase returned an invalid user") from exc
+
+    async def list_admin_users(self, page: int, page_size: int) -> tuple[list[AdminUser], bool]:
+        response = await self._admin_auth_request(
+            "GET",
+            "users",
+            params={"page": str(page), "per_page": str(page_size)},
+        )
+        try:
+            body = response.json()
+            rows = body["users"]
+        except (ValueError, TypeError, KeyError) as exc:
+            raise SupabaseUnavailable("Supabase returned an invalid user list") from exc
+        if not isinstance(rows, list):
+            raise SupabaseUnavailable("Supabase returned an invalid user list")
+        users = [self._admin_user_from_row(row) for row in rows]
+        return users, len(users) == page_size
+
+    async def get_admin_sessions(self, user_id: str) -> list[AdminLearningSession]:
+        normalized_id = str(UUID(user_id))
+        response = await self._database_request(
+            "GET",
+            "learning_sessions",
+            params={
+                "select": SESSION_COLUMNS,
+                "user_id": f"eq.{normalized_id}",
+                "order": "created_at.desc",
+            },
+        )
+        sessions: list[AdminLearningSession] = []
+        for row in self._response_rows(response):
+            if not isinstance(row, dict) or not isinstance(row.get("created_at"), str) or not isinstance(
+                row.get("updated_at"), str
+            ):
+                raise SupabaseUnavailable("Supabase returned invalid learning progress")
+            sessions.append(
+                AdminLearningSession(
+                    session=self._session_from_row(row),
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
+                )
+            )
+        return sessions
+
+    async def set_user_suspended(self, user_id: str, suspended: bool) -> None:
+        normalized_id = str(UUID(user_id))
+        if suspended:
+            await self._set_account_suspension(normalized_id, True)
+        await self._admin_auth_request(
+            "PUT",
+            f"users/{normalized_id}",
+            json_body={"ban_duration": "876000h" if suspended else "none"},
+        )
+        if not suspended:
+            await self._set_account_suspension(normalized_id, False)
+
+    async def delete_user(self, user_id: str) -> None:
+        normalized_id = str(UUID(user_id))
+        await self._admin_auth_request("DELETE", f"users/{normalized_id}")
 
     def _database_headers(self) -> dict[str, str]:
         self._require_database_config()
@@ -326,12 +590,63 @@ class InMemorySessionRepository:
     def __init__(self) -> None:
         self._sessions: dict[str, tuple[str, LearningSession]] = {}
         self.feedback_entries: list[tuple[str, str]] = []
+        self._moderated_feedback: dict[str, FeedbackEntry] = {}
+        self._suspended_users: set[str] = set()
 
     async def authenticate(self, access_token: str) -> AuthenticatedUser:
         raise NotImplementedError
 
     async def submit_feedback(self, user: AuthenticatedUser, feedback: str) -> None:
         self.feedback_entries.append((user.user_id, feedback))
+        entry_id = str(uuid4())
+        self._moderated_feedback[entry_id] = FeedbackEntry(
+            id=entry_id,
+            user_id=user.user_id,
+            feedback=feedback,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            is_featured=False,
+        )
+
+    async def get_featured_feedback(self) -> list[str]:
+        return [entry.feedback for entry in self._moderated_feedback.values() if entry.is_featured]
+
+    async def list_feedback(self) -> list[FeedbackEntry]:
+        return list(reversed(list(self._moderated_feedback.values())))
+
+    async def set_feedback_featured(self, feedback_id: str, is_featured: bool) -> None:
+        entry = self._moderated_feedback.get(feedback_id)
+        if entry is None:
+            raise SessionNotFound
+        self._moderated_feedback[feedback_id] = FeedbackEntry(
+            id=entry.id,
+            user_id=entry.user_id,
+            feedback=entry.feedback,
+            created_at=entry.created_at,
+            is_featured=is_featured,
+        )
+
+    async def list_admin_users(self, page: int, page_size: int) -> tuple[list[AdminUser], bool]:
+        return [], False
+
+    async def get_admin_sessions(self, user_id: str) -> list[AdminLearningSession]:
+        now = datetime.now(timezone.utc).isoformat()
+        return [
+            AdminLearningSession(session=session, created_at=now, updated_at=now)
+            for owner_id, session in self._sessions.values()
+            if owner_id == user_id
+        ]
+
+    async def set_user_suspended(self, user_id: str, suspended: bool) -> None:
+        if suspended:
+            self._suspended_users.add(user_id)
+        else:
+            self._suspended_users.discard(user_id)
+
+    async def is_user_suspended(self, user_id: str) -> bool:
+        return user_id in self._suspended_users
+
+    async def delete_user(self, user_id: str) -> None:
+        raise SessionNotFound
 
     async def create_session(
         self,

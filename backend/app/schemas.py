@@ -95,6 +95,56 @@ class FeedbackResponse(BaseModel):
     message: str
 
 
+class FeaturedFeedbackResponse(BaseModel):
+    feedback: list[str]
+
+
+class AdminFeedbackItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    user_id: str
+    feedback: str
+    created_at: str
+    is_featured: bool
+
+
+class AdminFeedbackListResponse(BaseModel):
+    items: list[AdminFeedbackItem]
+
+
+class FeedbackFeatureRequest(BaseModel):
+    is_featured: bool
+
+
+class AdminUserItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: str
+    email: str
+    full_name: str
+    created_at: str
+    last_sign_in_at: str | None = None
+    banned_until: str | None = None
+
+
+class AdminUserListResponse(BaseModel):
+    users: list[AdminUserItem]
+    has_more: bool
+
+
+class AdminUserStatusRequest(BaseModel):
+    suspended: bool
+
+
+class AdminStatusResponse(BaseModel):
+    is_admin: bool = True
+
+
+class AdminActionResponse(BaseModel):
+    message: str
+
+
 class QuestionDraft(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -146,6 +196,19 @@ class ProgressResponse(BaseModel):
     accuracy_percent: int
     strengths: list[str]
     needs_practice: list[str]
+
+
+class AdminUserProgressItem(BaseModel):
+    session_id: str
+    profile: LearnerProfile
+    created_at: str
+    updated_at: str
+    progress: ProgressResponse
+
+
+class AdminUserProgressResponse(BaseModel):
+    user_id: str
+    sessions: list[AdminUserProgressItem]
 
 
 class PracticeAnswerResponse(BaseModel):

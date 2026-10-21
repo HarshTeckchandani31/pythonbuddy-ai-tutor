@@ -42,8 +42,12 @@ def make_client(
     configured: bool = True,
     repository: InMemorySessionRepository | None = None,
     user_id: str = TEST_USER_ID,
+    admin_email: str = "",
 ) -> TestClient:
-    settings = Settings(gemini_api_key="test-key" if configured else "")
+    settings = Settings(
+        gemini_api_key="test-key" if configured else "",
+        admin_email=admin_email,
+    )
     app = create_app(
         settings=settings,
         provider=provider,
@@ -108,6 +112,49 @@ def test_feedback_is_saved_for_authenticated_user_and_validated() -> None:
     assert client.post("/api/feedback", json={"feedback": "x" * 2001}).status_code == 422
 
 
+def test_admin_access_is_allowlisted_and_feedback_is_published_anonymously() -> None:
+    repository = InMemorySessionRepository()
+    unauthorized = make_client(FakeProvider(), repository=repository, admin_email="admin@example.com")
+    assert unauthorized.get("/api/admin/me").status_code == 403
+    assert unauthorized.get("/api/admin/feedback").status_code == 403
+
+    admin = make_client(
+        FakeProvider(),
+        repository=repository,
+        admin_email=" LEARNER@example.com ",
+    )
+    assert admin.get("/api/admin/me").json() == {"is_admin": True}
+    assert admin.get("/api/admin/users").json() == {"users": [], "has_more": False}
+    assert admin.get("/api/feedback/featured").json() == {"feedback": []}
+    session_id = create_session(admin)
+    progress = admin.get(f"/api/admin/users/{TEST_USER_ID}/progress")
+    assert progress.status_code == 200
+    assert progress.json()["sessions"][0]["session_id"] == session_id
+
+    assert admin.post("/api/feedback", json={"feedback": "Helpful lessons."}).status_code == 201
+    feedback = admin.get("/api/admin/feedback").json()["items"][0]
+    assert feedback["feedback"] == "Helpful lessons."
+    assert feedback["is_featured"] is False
+
+    selected = admin.patch(
+        f"/api/admin/feedback/{feedback['id']}",
+        json={"is_featured": True},
+    )
+    assert selected.status_code == 200
+    assert admin.get("/api/feedback/featured").json() == {"feedback": ["Helpful lessons."]}
+
+
+def test_admin_cannot_suspend_or_delete_its_own_account() -> None:
+    admin = make_client(FakeProvider(), admin_email="learner@example.com")
+    status = admin.patch(
+        f"/api/admin/users/{TEST_USER_ID}/status",
+        json={"suspended": True},
+    )
+    assert status.status_code == 400
+    deleted = admin.delete(f"/api/admin/users/{TEST_USER_ID}")
+    assert deleted.status_code == 400
+
+
 def test_frontend_and_api_share_one_origin() -> None:
     client = make_client(FakeProvider())
     response = client.get("/")
@@ -117,6 +164,9 @@ def test_frontend_and_api_share_one_origin() -> None:
         account = client.get("/account", headers={"accept": "text/html"})
         assert account.status_code == 200
         assert account.text == response.text
+        admin = client.get("/admin", headers={"accept": "text/html"})
+        assert admin.status_code == 200
+        assert admin.text == response.text
         assert client.get("/api/health").status_code == 200
     else:
         assert response.status_code == 503

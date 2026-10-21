@@ -16,9 +16,9 @@ Copy-Item .env.example .env
 Copy-Item frontend\.env.example frontend\.env.local
 ```
 
-1. Create a Supabase project. In its SQL Editor, run the latest [`supabase/schema.sql`](./supabase/schema.sql). If you've already run an earlier version, run this updated script again to create the feedback table.
+1. Create a Supabase project. In its SQL Editor, run the latest [`supabase/schema.sql`](./supabase/schema.sql). Rerun it after updates to add features such as feedback moderation and account suspension.
 2. In Supabase **Project Settings → API Keys**, copy the project URL, publishable key, and **service_role** key. The service-role key is secret; never put it in the frontend or share it.
-3. In the workspace-root `.env`, set `AI_PROVIDER=gemini`, `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. Set `GEMINI_MODEL=gemini-3.8-flash`.
+3. In the workspace-root `.env`, set `AI_PROVIDER=gemini`, `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. Set `ADMIN_EMAIL` to the exact email of your administrator account; leave it blank to disable administrator access. Set `GEMINI_MODEL=gemini-3.8-flash`.
 4. In `frontend/.env.local`, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` to the same project URL and publishable key. The publishable key is intended for browser use; database tables deny direct access to browser roles.
 5. In Supabase **Authentication → URL Configuration**, set the local Site URL to `http://localhost:3000` and add it to the redirect URLs. Email/password sign-up uses Supabase email confirmation when enabled in **Authentication → Providers → Email**.
 
@@ -54,6 +54,7 @@ Open http://localhost:3000. The React frontend and FastAPI `/api` routes share t
 | `SUPABASE_URL` | empty | Supabase project URL used by the backend |
 | `SUPABASE_PUBLISHABLE_KEY` | empty | Backend key used to verify Supabase user access tokens |
 | `SUPABASE_SERVICE_ROLE_KEY` | empty | Server-only key for the backend's protected database operations |
+| `ADMIN_EMAIL` | empty | Exact email allowlisted for the sole administrator; server-side only |
 | `ANTHROPIC_API_KEY` | empty | Optional server-side Anthropic credential |
 | `ANTHROPIC_MODEL` | `claude-haiku-4-5-20251001` | Anthropic model identifier |
 | `AI_TIMEOUT_SECONDS` | `20` | Provider request timeout |
@@ -64,7 +65,9 @@ Open http://localhost:3000. The React frontend and FastAPI `/api` routes share t
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | empty | Supabase publishable key for browser sign-in |
 
 ## Accounts and saved data
-Email and password registration/sign-in are provided by Supabase Auth. Supabase manages account credentials and email confirmation; the app stores the account email and learner preferences in `learner_profiles`. Each learner's sessions, progress, and private answer keys are stored in `learning_sessions`. Signed-in learners can submit feedback from the bottom-of-page feedback form; feedback is stored with the authenticated account in `learner_feedback`. All application tables have RLS enabled and deny access to `anon` and `authenticated`; only the backend uses the server-only service-role key, after verifying the user's access token. Do not expose the service-role key. Sessions created before this Supabase setup are not migrated.
+Email and password registration/sign-in are provided by Supabase Auth. Supabase manages account credentials and email confirmation; the app stores the account email and learner preferences in `learner_profiles`. Each learner's sessions, progress, and private answer keys are stored in `learning_sessions`. Signed-in learners can submit feedback from the bottom-of-page feedback form; feedback is stored with the authenticated account in `learner_feedback`.
+
+The `/admin` page is sign-in only; backend access is restricted to the exact email in the server-only `ADMIN_EMAIL` variable. The dashboard can review users' progress, suspend/reactivate accounts, permanently delete learner accounts and their associated data, and select feedback for anonymous display on the signup page. Rerun `supabase/schema.sql` to add the moderation and immediate-suspension tables. All application tables have RLS enabled and deny access to `anon` and `authenticated`; only the backend uses the server-only service-role key, after verifying the user's access token. Do not expose the service-role key. Sessions created before this Supabase setup are not migrated.
 
 ## API contract
 All routes are prefixed with `/api`; request and response schemas are defined in `backend/app/schemas.py`.
@@ -73,6 +76,14 @@ All routes are prefixed with `/api`; request and response schemas are defined in
 | --- | --- | --- |
 | `GET /health` | none | Service and AI configuration status |
 | `POST /feedback` | `{feedback}` (authenticated; 1-2000 characters) | Confirmation; stored with the signed-in user's ID |
+| `GET /feedback/featured` | none | Selected feedback, with no author identifiers |
+| `GET /admin/me` | none (administrator only) | Confirms server-side administrator authorization |
+| `GET /admin/feedback` | none (administrator only) | Feedback queue with display-selection state |
+| `PATCH /admin/feedback/{id}` | `{is_featured}` (administrator only) | Select or unselect anonymous public display |
+| `GET /admin/users` | `page`, `page_size` (administrator only) | Paginated Supabase Auth user directory |
+| `GET /admin/users/{id}/progress` | none (administrator only) | Learning sessions and progress summary |
+| `PATCH /admin/users/{id}/status` | `{suspended}` (administrator only) | Suspend or reactivate account and app access |
+| `DELETE /admin/users/{id}` | none (administrator only) | Permanently deletes the account and related app data |
 | `POST /sessions` | `{name, level, difficulty, topic}` | Session ID, profile, zeroed progress |
 | `POST /sessions/{id}/learn` | `{topic?}` | Explanation, Python example, check question |
 | `POST /sessions/{id}/doubt` | `{question}` | Answer and follow-up question |
@@ -104,11 +115,11 @@ The repository is configured for Vercel's FastAPI runtime. The Vercel build scri
 
 1. Push this project to a GitHub repository and import that repository in Vercel. Set the project root to the repository root and the Framework Preset to **Other** so Vercel uses the Python entrypoint in `pyproject.toml`.
 2. Add these environment variables in Vercel **Project Settings → Environment Variables**. Set them for Production and Preview environments as needed:
-   - Server-only: `AI_PROVIDER=gemini`, `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-3.8-flash`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
+   - Server-only: `AI_PROVIDER=gemini`, `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-3.8-flash`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `ADMIN_EMAIL` (the exact email for your Supabase administrator account).
    - Frontend build-time: `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`, using the same Supabase project URL and publishable key. `VITE_API_BASE_URL` can be omitted; the default `/api` uses the same Vercel domain.
    - Never add `SUPABASE_SERVICE_ROLE_KEY` or `GEMINI_API_KEY` as `VITE_` variables. Do not commit `.env` files.
 3. Redeploy after adding or changing environment variables. The frontend variables are embedded at build time, so a new deployment is needed for frontend changes to take effect.
-4. In Supabase **Authentication → URL Configuration**, set the production Site URL to your Vercel domain and add that domain to the allowed redirect URLs. Run the latest [`supabase/schema.sql`](./supabase/schema.sql) in the same Supabase project's SQL Editor; if you previously applied the older script, rerun it to create `learner_feedback`.
+4. In Supabase **Authentication → URL Configuration**, set the production Site URL to your Vercel domain and add that domain to the allowed redirect URLs. Run the latest [`supabase/schema.sql`](./supabase/schema.sql) in the same Supabase project's SQL Editor; rerun it after this update to add feedback moderation and account suspension support.
 
 The Vercel API and frontend share one origin. `CORS_ORIGINS` is only needed if you separately host a frontend; for a separate frontend deployment, include its exact origin. To run locally instead, use the steps above and `npm start`.
 

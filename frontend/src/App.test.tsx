@@ -2,11 +2,23 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import { tutorApi } from "./api";
+import { publicApi, tutorApi } from "./api";
 import { authApi, type AuthSession } from "./auth";
 import type { LearnerSession, Progress, TutorQuestion } from "./types";
 
 vi.mock("./api", () => ({
+  adminApi: {
+    getStatus: vi.fn(),
+    getUsers: vi.fn(),
+    getFeedback: vi.fn(),
+    setFeedbackFeatured: vi.fn(),
+    getUserProgress: vi.fn(),
+    setUserSuspended: vi.fn(),
+    deleteUser: vi.fn(),
+  },
+  publicApi: {
+    getFeaturedFeedback: vi.fn(),
+  },
   tutorApi: {
     createSession: vi.fn(),
     getLatestSession: vi.fn(),
@@ -88,6 +100,7 @@ beforeEach(() => {
   vi.mocked(authApi.getSession).mockResolvedValue(null);
   vi.mocked(authApi.signUp).mockResolvedValue(authSession);
   vi.mocked(tutorApi.getLatestSession).mockResolvedValue(null);
+  vi.mocked(publicApi.getFeaturedFeedback).mockResolvedValue({ feedback: [] });
   vi.mocked(tutorApi.submitFeedback).mockResolvedValue({ message: "Thanks for sharing your feedback." });
   vi.mocked(tutorApi.createSession).mockResolvedValue(session);
   vi.mocked(tutorApi.learn).mockResolvedValue({
@@ -103,6 +116,16 @@ afterEach(() => {
 });
 
 describe("PythonBuddy workspace", () => {
+  it("shows administrator-selected feedback anonymously on the signup page", async () => {
+    vi.mocked(publicApi.getFeaturedFeedback).mockResolvedValue({
+      feedback: ["The lessons are easy to follow."],
+    });
+    render(<App />);
+
+    expect(await screen.findByText("The lessons are easy to follow.")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Learner feedback" })).toBeInTheDocument();
+  });
+
   it("supports signing in with an existing account", async () => {
     const user = userEvent.setup();
     vi.mocked(authApi.signIn).mockResolvedValue(authSession);
