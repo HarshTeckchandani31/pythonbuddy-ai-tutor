@@ -11,6 +11,7 @@ from backend.app.providers.base import (
     MissingCredentials,
     ProviderRateLimited,
     ProviderTimeout,
+    ProviderUnavailable,
 )
 from backend.app.providers.factory import create_provider
 from backend.app.providers.gemini import GeminiProvider
@@ -118,3 +119,41 @@ def test_gemini_provider_maps_rate_limit_timeout_and_invalid_output() -> None:
 
     with pytest.raises(MissingCredentials):
         asyncio.run(GeminiProvider(Settings(gemini_api_key="")).generate_json("prompt"))
+
+
+def test_gemini_provider_retries_service_unavailable_once() -> None:
+    attempts = 0
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            return httpx.Response(503)
+        return httpx.Response(
+            200,
+            json={
+                "steps": [
+                    {"type": "model_output", "content": [{"type": "text", "text": '{"ok":true}'}]}
+                ]
+            },
+        )
+
+    result = asyncio.run(
+        GeminiProvider(settings(), httpx.MockTransport(respond)).generate_json("prompt")
+    )
+    assert result == {"ok": True}
+    assert attempts == 2
+
+    attempts = 0
+
+    def stay_unavailable(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(503)
+
+    unavailable_transport = httpx.MockTransport(stay_unavailable)
+    with pytest.raises(ProviderUnavailable):
+        asyncio.run(
+            GeminiProvider(settings(), unavailable_transport).generate_json("prompt")
+        )
+    assert attempts == 2

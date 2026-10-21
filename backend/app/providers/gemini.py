@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from time import perf_counter
@@ -51,24 +52,41 @@ class GeminiProvider(AIProvider):
             },
         }
         started_at = perf_counter()
-        try:
-            async with httpx.AsyncClient(
-                timeout=self._settings.provider_timeout_seconds,
-                transport=self._transport,
-            ) as client:
-                response = await client.post(self.endpoint, headers=headers, json=payload)
-        except httpx.TimeoutException as exc:
-            performance_logger.warning(
-                "Gemini request timed out after %.2f seconds",
-                perf_counter() - started_at,
-            )
-            raise ProviderTimeout from exc
-        except httpx.HTTPError as exc:
-            performance_logger.warning(
-                "Gemini request failed after %.2f seconds",
-                perf_counter() - started_at,
-            )
-            raise ProviderUnavailable from exc
+        deadline = started_at + self._settings.provider_timeout_seconds
+        attempt = 0
+        while True:
+            remaining = deadline - perf_counter()
+            if remaining <= 0:
+                raise ProviderTimeout
+            try:
+                async with asyncio.timeout(remaining):
+                    async with httpx.AsyncClient(
+                        timeout=remaining,
+                        transport=self._transport,
+                    ) as client:
+                        response = await client.post(self.endpoint, headers=headers, json=payload)
+            except (TimeoutError, httpx.TimeoutException) as exc:
+                performance_logger.warning(
+                    "Gemini request timed out after %.2f seconds",
+                    perf_counter() - started_at,
+                )
+                raise ProviderTimeout from exc
+            except httpx.HTTPError as exc:
+                performance_logger.warning(
+                    "Gemini request failed after %.2f seconds",
+                    perf_counter() - started_at,
+                )
+                raise ProviderUnavailable from exc
+
+            if response.status_code != 503 or attempt >= 1:
+                break
+
+            remaining = deadline - perf_counter()
+            if remaining <= 0.5:
+                break
+            performance_logger.warning("Gemini returned 503; retrying once")
+            await asyncio.sleep(min(0.5, remaining))
+            attempt += 1
 
         performance_logger.info(
             "Gemini request completed in %.2f seconds with status %s",
