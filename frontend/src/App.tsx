@@ -422,7 +422,7 @@ function LearnerApp() {
             {featuredFeedbackError && <p className="published-feedback-error" role="status">{featuredFeedbackError}</p>}
           </section>
           <form className="setup-form" onSubmit={(event) => void authenticate(event)}>
-            <div className="form-heading"><span className="step-label">ACCOUNT</span><span className="step-number">SUPABASE AUTH</span></div>
+            <div className="form-heading"><span className="step-label">ACCOUNT</span></div>
             <h2>{authMode === "signup" ? "Create your account." : "Welcome back."}</h2>
             <p className="form-sub">Use your email and password to save your learning progress.</p>
             {authMode === "signup" && (

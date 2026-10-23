@@ -125,6 +125,7 @@ describe("PythonBuddy workspace", () => {
     expect(await screen.findByText("The lessons are easy to follow.")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Learner feedback" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Administrator sign in" })).not.toBeInTheDocument();
+    expect(screen.queryByText("SUPABASE AUTH")).not.toBeInTheDocument();
   });
 
   it("supports signing in with an existing account", async () => {
