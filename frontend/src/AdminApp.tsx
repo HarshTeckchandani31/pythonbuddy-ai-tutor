@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { adminApi, type AdminFeedbackEntry, type AdminUser, type AdminUserProgress } from "./api";
 import { authApi, supabaseConfigured, type AuthSession } from "./auth";
 
@@ -18,6 +18,7 @@ function dateLabel(value: string | null): string {
 
 export default function AdminApp() {
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
+  const authSessionRef = useRef<AuthSession | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,14 +53,18 @@ export default function AdminApp() {
     let active = true;
     const unsubscribe = authApi.onAuthStateChange((nextSession) => {
       if (active) {
+        if (authSessionRef.current?.user.id !== nextSession?.user.id) setIsAdmin(null);
+        authSessionRef.current = nextSession;
         setAuthSession(nextSession);
         setAuthReady(true);
-        setIsAdmin(null);
       }
     });
     void authApi.getSession()
       .then((session) => {
-        if (active) setAuthSession(session);
+        if (active) {
+          authSessionRef.current = session;
+          setAuthSession(session);
+        }
       })
       .catch((cause: unknown) => {
         if (active) setAuthError(errorMessage(cause, "Could not restore your sign-in."));
@@ -143,7 +148,9 @@ export default function AdminApp() {
     setAuthLoading(true);
     setAuthError("");
     try {
-      setAuthSession(await authApi.signIn(email.trim(), password));
+      const session = await authApi.signIn(email.trim(), password);
+      authSessionRef.current = session;
+      setAuthSession(session);
       setPassword("");
     } catch (cause) {
       setAuthError(errorMessage(cause, "Sign-in failed. Please try again."));
@@ -156,6 +163,7 @@ export default function AdminApp() {
     setAuthError("");
     try {
       await authApi.signOut();
+      authSessionRef.current = null;
       setAuthSession(null);
       setIsAdmin(null);
       setPassword("");

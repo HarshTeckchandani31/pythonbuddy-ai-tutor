@@ -445,7 +445,6 @@ function LearnerApp() {
             <button className="auth-switch" type="button" disabled={loading} onClick={() => { setAuthMode(authMode === "signup" ? "signin" : "signup"); setError(""); setAuthNotice(""); }}>
               {authMode === "signup" ? "Already have an account? Sign in" : "New here? Create an account"}
             </button>
-            <a className="admin-login-link" href="/admin">Administrator sign in</a>
           </form>
         </main>
       ) : !session ? (

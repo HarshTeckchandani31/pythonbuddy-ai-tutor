@@ -43,6 +43,8 @@ const adminSession = {
   },
 } satisfies AuthSession;
 
+let authStateListener: ((session: AuthSession | null) => void) | undefined;
+
 const feedback = {
   id: "feedback-1",
   user_id: "learner-1",
@@ -61,7 +63,12 @@ const learner = {
 };
 
 beforeEach(() => {
+  authStateListener = undefined;
   vi.mocked(authApi.getSession).mockResolvedValue(null);
+  vi.mocked(authApi.onAuthStateChange).mockImplementation((callback) => {
+    authStateListener = callback;
+    return () => {};
+  });
   vi.mocked(authApi.signIn).mockResolvedValue(adminSession);
   vi.mocked(adminApi.getStatus).mockResolvedValue({ is_admin: true });
   vi.mocked(adminApi.getUsers).mockResolvedValue({ users: [], has_more: false });
@@ -105,6 +112,23 @@ describe("admin dashboard", () => {
 
     expect(await screen.findByRole("heading", { name: "Administrator access denied." })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Manage PythonBuddy." })).not.toBeInTheDocument();
+  });
+
+  it("keeps administrator access verified when the session token refreshes", async () => {
+    const user = userEvent.setup();
+    render(<AdminApp />);
+
+    await user.type(await screen.findByLabelText("Email"), "admin@example.com");
+    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.click(screen.getByRole("button", { name: "Sign in as administrator" }));
+
+    expect(await screen.findByRole("heading", { name: "Manage PythonBuddy." })).toBeInTheDocument();
+    const statusCallsBeforeRefresh = vi.mocked(adminApi.getStatus).mock.calls.length;
+    authStateListener?.({ ...adminSession, access_token: "refreshed-token" });
+
+    expect(screen.getByRole("heading", { name: "Manage PythonBuddy." })).toBeInTheDocument();
+    expect(screen.queryByText("Verifying administrator access...")).not.toBeInTheDocument();
+    expect(adminApi.getStatus).toHaveBeenCalledTimes(statusCallsBeforeRefresh);
   });
 
   it("shows user accounts and loads their progress on demand", async () => {
